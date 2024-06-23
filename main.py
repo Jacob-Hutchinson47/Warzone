@@ -1352,7 +1352,7 @@ def multiplayer_client(server_ip, port):
             if explosion.time_left == 0:
                 explosions.remove(explosion)
 
-        redraw_window(player, player2, map.walls, bullets, [], [], [], FLOOR_IMAGE, text_boxes)
+        redraw_window(player, player2, map.walls, bullets, [], [], explosions, FLOOR_IMAGE, text_boxes)
 
         # Debugging mode
         if debugging:
