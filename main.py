@@ -42,6 +42,7 @@ WALL_IMAGE = pygame.transform.scale(pygame.image.load("Assets/Images/Wooden Crat
 FLOOR_IMAGE = pygame.transform.scale(pygame.image.load("Assets/Images/Floor.png"),
                                      (SCREEN_WIDTH, SCREEN_HEIGHT)).convert()
 HEALTH_BOX_IMAGE = pygame.transform.scale(pygame.image.load("Assets/Images/health box.png"), (78, 54)).convert_alpha()
+AMMO_BOX_IMAGE = pygame.transform.scale(pygame.image.load("Assets/Images/ammo box.png"), (78, 54)).convert_alpha()
 
 CROSSHAIR_SIZE = 60
 CROSSHAIR_IMAGE = pygame.transform.scale(pygame.image.load("Assets/Images/crosshair.png").convert_alpha(),
@@ -89,6 +90,10 @@ class Player(Entity):
         self.shooting = False
         self.health = 100
         self.weapon_cooldown = 0
+        self.shotgun_ammo = 10
+        self.auto_rifle_ammo = 50
+        self.sniper_ammo = 10
+        self.rpg_ammo = 2
 
     def move(self, walls):
         keys = pygame.key.get_pressed()
@@ -157,8 +162,10 @@ class Player(Entity):
                 super().draw(PLAYER_SNIPER_IMAGE)
             elif self.current_weapon == "rpg":
                 super().draw(PLAYER_RPG_IMAGE)
-            self.draw_crosshair()
             self.draw_healthbar()
+            self.display_ammo()
+            self.display_current_weapon()
+            self.draw_crosshair()
 
     def update(self, walls, bullets, enemies, explosions):
         self.move(walls)
@@ -208,14 +215,18 @@ class Player(Entity):
         if self.weapon_cooldown == 0:
             if self.current_weapon == "pistol":
                 self.shoot_pistol(new_bullets)
-            if self.current_weapon == "shotgun":
+            if self.current_weapon == "shotgun" and self.shotgun_ammo > 0:
                 self.shoot_shotgun(new_bullets)
-            if self.current_weapon == "auto_rifle":
+                self.shotgun_ammo -= 1
+            if self.current_weapon == "auto_rifle" and self.auto_rifle_ammo > 0:
                 self.shoot_auto_rifle(new_bullets)
-            if self.current_weapon == "sniper":
+                self.auto_rifle_ammo -= 1
+            if self.current_weapon == "sniper" and self.sniper_ammo > 0:
                 self.shoot_sniper(new_bullets)
-            if self.current_weapon == "rpg":
+                self.sniper_ammo -= 1
+            if self.current_weapon == "rpg" and self.rpg_ammo > 0:
                 self.shoot_rpg(new_bullets)
+                self.rpg_ammo -= 1
 
     def shoot_pistol(self, new_bullets):
         bullet = Bullet((self.x_pos, self.y_pos), 12, 0, 12.25, 30)
@@ -265,6 +276,25 @@ class Player(Entity):
         pygame.draw.rect(SCREEN, "red", (550, 925, 400, 50))
         pygame.draw.rect(SCREEN, "green", (550, 925, self.health * 4, 50))
 
+    def display_ammo(self):
+        if self.current_weapon == "shotgun":
+            ammo = str(self.shotgun_ammo)
+        elif self.current_weapon == "auto_rifle":
+            ammo = str(self.auto_rifle_ammo)
+        elif self.current_weapon == "sniper":
+            ammo = str(self.sniper_ammo)
+        elif self.current_weapon == "rpg":
+            ammo = str(self.rpg_ammo)
+        else:
+            ammo = "∞"
+
+        ammo_text = Text((1210, 966), "Ammo:" + ammo, get_font(20), "white")
+        ammo_text.draw()
+
+    def display_current_weapon(self):
+        current_weapon_text = Text((1210, 933), f"Current weapon:{self.current_weapon}", get_font(20), "white")
+        current_weapon_text.draw()
+
     def display_health(self):  # For multiplayer to display enemy player's health
         if self.health < 0:
             self.health = 0
@@ -287,6 +317,7 @@ class Bullet(Entity):
         self.spread = spread
         self.speed = speed
         self.damage = damage
+        self.to_be_deleted = False
 
         # Set velocity of bullet in x and y directions
         mouse_position = pygame.mouse.get_pos()
@@ -296,7 +327,7 @@ class Bullet(Entity):
 
         self.move_in_front_of_player(angle, size)
 
-    def update(self, entities, walls, explosions):
+    def update(self, entities, map, explosions):
         self.x_pos += self.velocity[0]
         self.y_pos += self.velocity[1]
         self.rect.center = self.x_pos, self.y_pos
@@ -321,19 +352,23 @@ class Bullet(Entity):
 class Rocket(Bullet):
     def __init__(self, position):
         super().__init__(position, 35, 0, 4, 200)
-        self.exploding = False
 
         mouse_position = pygame.mouse.get_pos()
         self.angle = math.degrees(math.atan2(-(mouse_position[1] - self.y_pos), mouse_position[0] - self.x_pos)) - 45
 
-    def update(self, entities, walls, explosions):
-        super().update(entities, walls, explosions)
+    def update(self, entities, map, explosions):
+        super().update(entities, map, explosions)
         for entity in entities:
             if self.rect.colliderect(entity.rect):
                 explosions.append(Explosion((self.x_pos, self.y_pos), 100, 25, 200))
-        for wall in walls:
+        for wall in map.walls:
             if self.rect.colliderect(wall):
                 explosions.append(Explosion((self.x_pos, self.y_pos), 100, 25, 200))
+                wall_coords = wall.top // 100, wall.left // 100
+                if not (wall_coords[0] == 0 or wall_coords[0] == 9 or wall_coords[1] == 0 or wall_coords[1] == 14):
+                    map.walls.remove(wall)
+                    map.map[wall.top // 100][wall.left // 100] = 0
+                    self.to_be_deleted = True
 
     def draw(self, image):
         super().draw(ROCKET_IMAGE)
@@ -509,9 +544,22 @@ class HardEnemy(Enemy):
 class HealthBox(Entity):
     def __init__(self, position):
         super().__init__(position, 78, 54)
+        self.health = 50
 
     def draw(self, image):
         super().draw(HEALTH_BOX_IMAGE)
+
+
+class AmmoBox(Entity):
+    def __init__(self, position):
+        super().__init__(position, 78, 54)
+        self.shotgun_ammo = 10
+        self.auto_rifle_ammo = 50
+        self.sniper_ammo = 10
+        self.rpg_ammo = 2
+
+    def draw(self, image):
+        super().draw(AMMO_BOX_IMAGE)
 
 
 class Text:
@@ -882,14 +930,14 @@ def draw_debugging_tools(player, enemies, bullets, enemy_spawn_points, player_sp
     SCREEN.blit(render_text, rect)
 
 
-def redraw_window(player, enemy_player, walls, bullets, enemies, health_boxes, explosions, background_image, ui):
+def redraw_window(player, enemy_player, walls, bullets, enemies, boxes, explosions, background_image, ui):
     SCREEN.blit(background_image, (0, 0))
 
     for wall in walls:
         SCREEN.blit(WALL_IMAGE, wall)
 
-    for health_box in health_boxes:
-        health_box.draw(None)
+    for box in boxes:
+        box.draw(None)
 
     for bullet in bullets:
         bullet.draw(None)
@@ -925,15 +973,14 @@ def single_player(map, game_difficulty, length_of_game):
     TIMER_EVENT = pygame.USEREVENT + 0
     pygame.time.set_timer(TIMER_EVENT, 1000)  # Event happens every 1000 milliseconds (1 second)
 
-    current_weapon_text = Text((840, 30), f"Current weapon: {player.current_weapon}", get_font(20), "white")
-
-    text_boxes = [timer_text, current_weapon_text, score_text]
+    text_boxes = [timer_text, score_text]
 
     debugging = False
 
     enemies = []
     bullets = []
     health_boxes = []
+    ammo_boxes = []
     explosions = []
 
     while timer > 0 and player.health > 0:
@@ -956,7 +1003,6 @@ def single_player(map, game_difficulty, length_of_game):
                 keys = pygame.key.get_pressed()
 
                 player.switch_weapon(keys)
-                current_weapon_text.change_text(f"Current weapon: {player.current_weapon}")
 
                 # Set timer to zero to end the game
                 if debugging and keys[pygame.K_0]:
@@ -983,19 +1029,30 @@ def single_player(map, game_difficulty, length_of_game):
                     enemy.update_path(map.map, player.coords)
                     enemies.append(enemy)
 
-                # Spawn a health box halfway through the game at a random empty position (not in hard mode)
+                # Spawn a health an ammo box halfway through the game at a random empty positions (not in hard mode)
                 if timer == int(length_of_game / 2) and game_difficulty != "hard":
-                    y, x = map.get_random_empty_cell()
-                    health_box = HealthBox(convert_coords((x, y)))
+                    health_y, health_x = map.get_random_empty_cell()
+                    ammo_y, ammo_x = map.get_random_empty_cell()
+                    while health_x == ammo_x and health_y == ammo_y:
+                        health_y, health_x = map.get_random_empty_cell()
+                        ammo_y, ammo_x = map.get_random_empty_cell()
+
+                    health_box = HealthBox(convert_coords((health_x, health_y)))
                     health_boxes.append(health_box)
+
+                    ammo_box = AmmoBox(convert_coords((ammo_x, ammo_y)))
+                    ammo_boxes.append(ammo_box)
 
         # Deletes bullets if they hit a wall
         for bullet in bullets:
-            bullet.update([player] + enemies, map.walls, explosions)
-            for wall in map.walls:
-                if bullet.rect.colliderect(wall):
-                    bullets.remove(bullet)
-                    break  # Break incase two walls are hit
+            bullet.update([player] + enemies, map, explosions)
+            if bullet.to_be_deleted:
+                bullets.remove(bullet)
+            else:
+                for wall in map.walls:
+                    if bullet.rect.colliderect(wall):
+                        bullets.remove(bullet)
+                        break  # Break incase two walls are hit
 
         for explosion in explosions:
             explosion.update()
@@ -1012,21 +1069,30 @@ def single_player(map, game_difficulty, length_of_game):
             else:
                 enemy.update((player.x_pos, player.y_pos), bullets, explosions)
 
-                # Add 50 health to the player when they go to a health box
-                for health_box in health_boxes:
-                    if player.rect.colliderect(health_box.rect):
-                        player.health += 50
-                        health_boxes.remove(health_box)
-                    if player.health > 100:
-                        player.health = 100
-
             # Only update the path of the enemy if the player or enemy has moved coords
             if player.previous_coords != player.coords or enemy.previous_coords != enemy.coords:
                 enemy.update_path(map.map, player.coords)
 
+        # Add 50 health to the player when they go to a health box
+        for health_box in health_boxes:
+            if player.rect.colliderect(health_box.rect):
+                player.health += health_box.health
+                health_boxes.remove(health_box)
+            if player.health > 100:
+                player.health = 100
+
+        # Add ammo to the player when they go to an ammo box
+        for ammo_box in ammo_boxes:
+            if player.rect.colliderect(ammo_box.rect):
+                player.shotgun_ammo += ammo_box.shotgun_ammo
+                player.auto_rifle_ammo += ammo_box.auto_rifle_ammo
+                player.sniper_ammo += ammo_box.sniper_ammo
+                player.rpg_ammo += ammo_box.rpg_ammo
+                ammo_boxes.remove(ammo_box)
+
         bullets.extend(player.update(map.walls, bullets, enemies, explosions))
 
-        redraw_window(player, [], map.walls, bullets, enemies, health_boxes, explosions, FLOOR_IMAGE, text_boxes)
+        redraw_window(player, [], map.walls, bullets, enemies, health_boxes + ammo_boxes, explosions, FLOOR_IMAGE, text_boxes)
 
         # Debugging mode
         if debugging:
@@ -1291,9 +1357,6 @@ def multiplayer_client(server_ip, port):
     pygame.mixer_music.pause()
     pygame.mouse.set_visible(False)
 
-    current_weapon_text = Text((840, 30), f"Current weapon: {player.current_weapon}", get_font(20), "white")
-    text_boxes = [current_weapon_text]
-
     bullets = []
     explosions = []
 
@@ -1316,7 +1379,6 @@ def multiplayer_client(server_ip, port):
                 keys = pygame.key.get_pressed()
 
                 player.switch_weapon(keys)
-                current_weapon_text.change_text(f"Current weapon: {player.current_weapon}")
 
                 # Toggles debugging mode
                 if keys[pygame.K_TAB]:
@@ -1338,21 +1400,24 @@ def multiplayer_client(server_ip, port):
 
         # Deletes bullets if they hit a wall
         for bullet in bullets:
-            bullet.update([player], map.walls, explosions)
+            bullet.update([player], map, explosions)
             if player2 and bullet.rect.colliderect(
                     player2.rect):  # remove bullets for the client if they hit the enemy player
                 bullets.remove(bullet)
-            for wall in map.walls:
-                if bullet.rect.colliderect(wall):
-                    bullets.remove(bullet)
-                    break  # Break incase two walls are hit
+            if bullet.to_be_deleted:
+                bullets.remove(bullet)
+            else:
+                for wall in map.walls:
+                    if bullet.rect.colliderect(wall):
+                        bullets.remove(bullet)
+                        break  # Break incase two walls are hit
 
         for explosion in explosions:
             explosion.update()
             if explosion.time_left == 0:
                 explosions.remove(explosion)
 
-        redraw_window(player, player2, map.walls, bullets, [], [], explosions, FLOOR_IMAGE, text_boxes)
+        redraw_window(player, player2, map.walls, bullets, [], [], explosions, FLOOR_IMAGE, [])
 
         # Debugging mode
         if debugging:
