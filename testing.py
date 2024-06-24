@@ -1112,7 +1112,8 @@ def main_menu():
     single_player_button = Button((SCREEN_WIDTH / 2, 400), "SINGLEPLAYER", get_font(60), "black", "grey")
     multiplayer_button = Button((SCREEN_WIDTH / 2, 525), "MULTIPLAYER", get_font(60), "black", "grey")
     quit_button = Button((SCREEN_WIDTH / 2, 650), "QUIT", get_font(75), "black", "grey")
-    buttons = [single_player_button, multiplayer_button, quit_button]
+    controls_button = Button((SCREEN_WIDTH / 2, 950), "CONTROLS", get_font(30), "black", "grey")
+    buttons = [single_player_button, multiplayer_button, quit_button, controls_button]
 
     while True:
         mouse_position = pygame.mouse.get_pos()
@@ -1136,6 +1137,8 @@ def main_menu():
                 if quit_button.check_for_input(mouse_position):
                     pygame.quit()
                     sys.exit()
+                if controls_button.check_for_input(mouse_position):
+                    controls_screen()
 
         redraw_window(None, [], [], [], [], [], [], BACKGROUND_IMAGE, [main_menu_text] + buttons)
 
@@ -1448,6 +1451,43 @@ def outcome_screen(outcome):
             if event.type == pygame.MOUSEBUTTONDOWN:
                 if main_menu_button.check_for_input(pygame.mouse.get_pos()):
                     return
+
+        pygame.display.update()
+
+
+def controls_screen():
+    controls = [Text((SCREEN_WIDTH / 2, 300), "w - move up", get_font(20), "black"),
+                Text((SCREEN_WIDTH / 2, 330), "a - move left", get_font(20), "black"),
+                Text((SCREEN_WIDTH / 2, 360), "s - move down", get_font(20), "black"),
+                Text((SCREEN_WIDTH / 2, 390), "d - move right", get_font(20), "black"),
+                Text((SCREEN_WIDTH / 2, 420), "1 - pistol", get_font(20), "black"),
+                Text((SCREEN_WIDTH / 2, 450), "2 - shotgun", get_font(20), "black"),
+                Text((SCREEN_WIDTH / 2, 480), "3 - auto_rifle", get_font(20), "black"),
+                Text((SCREEN_WIDTH / 2, 510), "4 - sniper", get_font(20), "black"),
+                Text((SCREEN_WIDTH / 2, 540), "5 - rpg", get_font(20), "black"),
+                Text((SCREEN_WIDTH / 2, 570), "leftmousebutton - shoot", get_font(20), "black"),
+                Text((SCREEN_WIDTH / 2, 600), "tab - dev mode", get_font(20), "black")]
+
+    controls_text = Text((SCREEN_WIDTH / 2, 200), "CONTROLS", get_font(100), "black")
+
+    main_menu_button = Button((SCREEN_WIDTH / 2, 700), "Main Menu", get_font(50), "black", "grey")
+
+    while True:
+        SCREEN.blit(BACKGROUND_IMAGE, (0, 0))
+
+        for text in controls:
+            text.draw()
+        controls_text.draw()
+
+        main_menu_button.draw()
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if main_menu_button.check_for_input(pygame.mouse.get_pos()):
+                    return  # Return to main menu
 
         pygame.display.update()
 
