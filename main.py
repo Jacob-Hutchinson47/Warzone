@@ -770,7 +770,7 @@ class Network:
     def connect(self):
         try:
             self.client.connect(self.address)
-            return pickle.loads(self.client.recv(2048))
+            return pickle.loads(self.client.recv(4096))
         except Exception as e:
             print(e)
 
@@ -779,8 +779,8 @@ class Network:
             input_data = player, bullets
             self.client.send(pickle.dumps(input_data))
 
-            output_data = pickle.loads(self.client.recv(2048))
-            if output_data != "win" and output_data != "lose":
+            output_data = pickle.loads(self.client.recv(4096))
+            if output_data != "win" and output_data != "lose" and output_data != "respawn":
                 player = output_data[0]
                 bullets = output_data[1]
                 return player, bullets
@@ -793,6 +793,8 @@ def client_server_interaction(connection, map, players, player_number, player_bu
     start_data = players[player_number], map
     connection.sendall(pickle.dumps(start_data))
 
+    player_lives = [3, 3]
+
     end_of_game = False
     while not end_of_game:
         try:
@@ -804,18 +806,23 @@ def client_server_interaction(connection, map, players, player_number, player_bu
                 print("Disconnected")
                 break
             elif players[1]:  # Only do if 2nd player has joined
-                if players[player_number].health <= 0:
-                    reply = "lose"
-                    end_of_game = True
-                elif players[1 - player_number].health <= 0:
+                if players[1 - player_number].health <= 0 and player_lives[1 - player_number] == 1:
                     reply = "win"
                     end_of_game = True
                 else:
                     reply = players[1 - player_number], player_bullets[1 - player_number]
-            elif players[player_number].health <= 0:
-                reply = "lose"
             else:
                 reply = None, []
+
+            if players[player_number].health <= 0 and player_lives[player_number] > 1:
+                player_lives[player_number] -= 1
+                reply = "respawn", player_lives[player_number]
+            elif players[player_number].health <= 0 and player_lives[player_number] == 1:
+                reply = "lose"
+                end_of_game = True
+
+            if players[1] and players[1-player_number].health <= 0 and player_lives[1-player_number] > 1:
+                player_lives[1-player_number] -= 1
 
             connection.sendall(pickle.dumps(reply))
         except Exception as e:
@@ -1360,6 +1367,8 @@ def multiplayer_client(server_ip, port):
     pygame.mixer_music.pause()
     pygame.mouse.set_visible(False)
 
+    lives_text = Text((1300, 50), f"Lives: {3}", get_font(20), "white")
+
     bullets = []
     explosions = []
 
@@ -1387,15 +1396,19 @@ def multiplayer_client(server_ip, port):
                 if keys[pygame.K_TAB]:
                     debugging = not debugging
 
-                # Kills the player if '0' key is pressed
-                if debugging and keys[pygame.K_0]:
-                    player.health = 0
-
         new_bullets = player.update(map.walls, bullets, [], explosions)
 
         message = network.send(player, new_bullets)
         if message == "win" or message == "lose":
             break
+        elif message[0] == "respawn":
+            # Spawn the player at the first spawn point unless the other player is on it
+            if player2 and (player2.coords == map.player_spawns[0]):
+                player = Player(convert_coords(map.player_spawns[1]), 90, 90, "pistol")
+            else:
+                player = Player(convert_coords(map.player_spawns[0]), 90, 90, "pistol")
+            enemy_bullets = []
+            lives_text.change_text(f"Lives: {message[1]}")
         else:
             player2, enemy_bullets = message
 
@@ -1420,7 +1433,7 @@ def multiplayer_client(server_ip, port):
             if explosion.time_left == 0:
                 explosions.remove(explosion)
 
-        redraw_window(player, player2, map.walls, bullets, [], [], explosions, FLOOR_IMAGE, [])
+        redraw_window(player, player2, map.walls, bullets, [], [], explosions, FLOOR_IMAGE, [lives_text])
 
         # Debugging mode
         if debugging:
